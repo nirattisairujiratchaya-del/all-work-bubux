@@ -211,6 +211,23 @@
     .toast{left:12px; right:12px; bottom:14px; text-align:center;}
     .group-header{margin-top:14px;}
   }
+  /* ---- มือถือ: การ์ดรหัสผ่าน/ลิงก์ แบบกะทัดรัด ---- */
+  @media (max-width:800px){
+    .grid{gap:8px;}
+    .canvas-card.row{border-radius:16px; border-left:5px solid var(--accent-soft);}
+    .canvas-card.row .cover{display:none;}
+    .canvas-card.row .cbody{padding:10px 12px 6px;}
+    .canvas-card.row .ctitle{font-size:15px;}
+    .canvas-card.row .cred{margin-top:6px; padding:4px 10px; border-radius:12px;}
+    .cred .crow{flex-wrap:nowrap; row-gap:0; gap:6px; padding:3px 0;}
+    .cred .crow .v{flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; word-break:normal; white-space:nowrap;}
+    .cred .lb{width:32px; font-size:12px;}
+    .ib-wrap{gap:4px;}
+    .ib, .ib-wrap .ib{padding:5px 9px !important; font-size:12px !important; border-radius:9px;}
+    .canvas-card.row .cfoot{flex-wrap:nowrap; justify-content:space-between; padding:0 4px; margin:0;}
+    .canvas-card.row .cfoot button{padding:7px 8px !important; font-size:12.5px !important;}
+    .group-header{margin:10px 0 2px;}
+  }
 </style>
 </head>
 <body>

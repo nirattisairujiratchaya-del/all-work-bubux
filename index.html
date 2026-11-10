@@ -238,6 +238,7 @@ const DEFAULT_DATA = {
     {title:"CS Team | Notion", url:"https://app.notion.com/p/CS-Team-31a41b7af0c28006a005ddf4635f4aa9", note:""}
   ],
   passwords: [],
+  personal: [],
   patterns: []
 };
 
@@ -246,12 +247,13 @@ let vaultData = null;
 let saltB64 = null;
 let searchQuery = "";
 let showPw = {};
-let editIndex = { links: -1, passwords: -1, patterns: -1 };
+let editIndex = { links: -1, passwords: -1, personal: -1, patterns: -1 };
+let showPp = {};
 let activeTab = "pinned";
 let patternFilter = "all"; // all | cabal | hof
 
 const app = document.getElementById("app");
-const TAB_TITLES = { pinned:"ปักหมุด", links:"ลิงก์ & เครื่องมือ", passwords:"รหัสผ่าน", patterns:"แพทเทิร์นการพิมพ์", images:"รูปภาพ", import:"นำเข้าข้อมูล" };
+const TAB_TITLES = { pinned:"ปักหมุด", links:"ลิงก์ & เครื่องมือ", passwords:"รหัสผ่าน", personal:"รหัสผ่านส่วนตัว", patterns:"แพทเทิร์นการพิมพ์", images:"รูปภาพ", import:"นำเข้าข้อมูล" };
 let images = null; // null = ยังไม่โหลด
 let imagesLoading = false;
 const imgCache = {};
@@ -444,6 +446,7 @@ async function init(){
       try{
         const key = await crypto.subtle.importKey("jwk", JSON.parse(saved), {name:"AES-GCM"}, true, ["encrypt","decrypt"]);
         vaultData = await decryptData(key, data.encrypted_data);
+        if(!Array.isArray(vaultData.personal)) vaultData.personal = [];
         cryptoKey = key;
         renderDashboard();
         return;
@@ -603,6 +606,7 @@ function renderDashboard(){
             <button class="tab-btn" data-tab="pinned"></button>
             <button class="tab-btn" data-tab="links"></button>
             <button class="tab-btn" data-tab="passwords"></button>
+            <button class="tab-btn" data-tab="personal"></button>
             <button class="tab-btn" data-tab="patterns"></button>
             <button class="tab-btn" data-tab="images"></button>
             <button class="tab-btn" data-tab="import"></button>
@@ -626,6 +630,7 @@ function renderDashboard(){
           <section class="card" id="sec-pinned"></section>
           <section class="card" id="sec-links"></section>
           <section class="card" id="sec-passwords"></section>
+          <section class="card" id="sec-personal"></section>
           <section class="card" id="sec-patterns"></section>
           <section class="card" id="sec-images"></section>
         </div>
@@ -646,7 +651,7 @@ function renderDashboard(){
 }
 
 function applyActiveTab(){
-  const map = { pinned:"sec-pinned", import:"sec-import", links:"sec-links", passwords:"sec-passwords", patterns:"sec-patterns", images:"sec-images" };
+  const map = { pinned:"sec-pinned", import:"sec-import", links:"sec-links", passwords:"sec-passwords", personal:"sec-personal", patterns:"sec-patterns", images:"sec-images" };
   Object.entries(map).forEach(([tab, id]) => {
     const el = document.getElementById(id);
     if(el) el.style.display = (tab === activeTab) ? "block" : "none";
@@ -663,7 +668,9 @@ function renderSections(){
   renderImport();
   renderPinned();
   renderLinks();
+  if(!Array.isArray(vaultData.personal)) vaultData.personal = [];
   renderPasswords();
+  renderPersonal();
   renderPatterns();
   renderImages();
 }
@@ -673,6 +680,7 @@ function updateSidebarCounts(){
   set("pinned", `⭐ ปักหมุด (${(vaultData.passwords.filter(x=>x.pinned).length + vaultData.links.filter(x=>x.pinned).length + vaultData.patterns.filter(x=>x.pinned).length)})`);
   set("links", `🔗 ลิงก์ & เครื่องมือ (${vaultData.links.length})`);
   set("passwords", `🔑 รหัสผ่าน (${vaultData.passwords.length})`);
+  set("personal", `🔒 รหัสผ่านส่วนตัว (${(vaultData.personal||[]).length})`);
   set("patterns", `⌨️ แพทเทิร์นการพิมพ์ (${vaultData.patterns.length})`);
   set("images", images ? `🖼️ รูปภาพ (${images.length})` : `🖼️ รูปภาพ`);
   set("import", `📥 นำเข้าข้อมูล`);
@@ -950,6 +958,95 @@ function renderPasswords(){
     saveState(); renderPasswords();
   };
   enableReorder(el, 'passwords', renderPasswords);
+  updateSidebarCounts();
+}
+// ----- Personal passwords (แยกจากรหัสผ่านงาน) -----
+function renderPersonal(){
+  const el = document.getElementById("sec-personal");
+  if(!el) return;
+  if(!Array.isArray(vaultData.personal)) vaultData.personal = [];
+  const items = vaultData.personal.map((it, i) => ({...it, _i:i})).filter(it => matches(it.site) || matches(it.username) || matches(it.note));
+  const card = it => {
+    if(editIndex.personal === it._i){
+      return `
+      <div class="editcard">
+        <input id="pp-e-site-${it._i}" value="${escapeHtml(it.site)}" placeholder="เว็บไซต์ / ระบบ" autocomplete="off" />
+        <input id="pp-e-user-${it._i}" value="${escapeHtml(it.username||"")}" placeholder="ชื่อผู้ใช้ / อีเมล" autocomplete="off" />
+        <input id="pp-e-pass-${it._i}" value="${escapeHtml(it.password||"")}" placeholder="รหัสผ่าน" autocomplete="off" />
+        <textarea id="pp-e-note-${it._i}" placeholder="โน้ต (ไม่บังคับ)">${escapeHtml(it.note||"")}</textarea>
+        <div class="acts">
+          <button class="small" id="pp-save-${it._i}">บันทึก</button>
+          <button class="ghost small" id="pp-cancel-${it._i}">ยกเลิก</button>
+        </div>
+      </div>`;
+    }
+    const visible = !!showPp[it._i];
+    return `
+    <div class="canvas-card row" data-idx="${it._i}">
+      <div>
+        <div class="cover ${coverClass(it.site)}"><span>🔒</span><span class="chip">${escapeHtml(it.site)}</span></div>
+        <div class="cbody">
+          <div class="ctitle">${escapeHtml(it.site)}</div>
+          <div class="cred">
+            <div class="crow"><span class="lb">User</span><span class="v">${escapeHtml(it.username || it.site)}</span><span class="ib-wrap"><button class="ib" id="pp-copyuser-${it._i}">📋 คัดลอก</button></span></div>
+            <div class="crow"><span class="lb">Pass</span><span class="v pv">${visible ? escapeHtml(it.password) : "••••••••••"}</span><span class="ib-wrap"><button class="ib" id="pp-toggle-${it._i}">${visible ? "🙈" : "👁️"}</button><button class="ib" id="pp-copy-${it._i}">📋 คัดลอก</button></span></div>
+          </div>
+          ${it.note ? `<div class="csub" style="margin-top:8px;">${escapeHtml(it.note)}</div>` : ""}
+        </div>
+      </div>
+      <div class="cfoot">
+        <button class="mv" data-move="up" title="ย้ายขึ้น">▲</button>
+        <button class="mv" data-move="down" title="ย้ายลง">▼</button>
+        <button id="pp-edit-${it._i}">✏️ แก้ไข</button>
+        <button id="pp-del-${it._i}">🗑️ ลบ</button>
+      </div>
+    </div>`;
+  };
+  el.innerHTML = `
+    <p class="count-line">ทั้งหมด ${vaultData.personal.length} รายการ · <span class="hint-desktop">กดค้างที่กล่องแล้วลากเพื่อเรียงลำดับ</span><span class="hint-touch">ใช้ปุ่ม ▲ ▼ เพื่อเรียงลำดับ</span></p>
+    <div class="grid">
+      ${items.length ? items.map(card).join("") : `<div class="empty">ยังไม่มีรหัสผ่านส่วนตัว</div>`}
+    </div>
+    <div class="addcard">
+      <h3>+ เพิ่มรหัสผ่านส่วนตัว</h3>
+      <input id="pp-site" placeholder="เว็บไซต์ / ระบบ" autocomplete="off" />
+      <input id="pp-user" placeholder="ชื่อผู้ใช้ / อีเมล" autocomplete="off" />
+      <input id="pp-pass" placeholder="รหัสผ่าน" autocomplete="off" />
+      <input id="pp-note" placeholder="โน้ต (ไม่บังคับ)" />
+      <button class="full" id="pp-add">+ เพิ่มรหัสผ่าน</button>
+    </div>
+  `;
+  items.forEach(it => {
+    const $ = id => document.getElementById(`${id}-${it._i}`);
+    if(editIndex.personal === it._i){
+      $("pp-save").onclick = () => {
+        const s = $("pp-e-site").value.trim(), u = $("pp-e-user").value.trim(), pw = $("pp-e-pass").value, n = $("pp-e-note").value.trim();
+        if(!s || !pw){ toast("กรอกเว็บไซต์และรหัสผ่านก่อน"); return; }
+        vaultData.personal[it._i] = {site:s, username:u, password:pw, note:n};
+        editIndex.personal = -1; saveState(); renderPersonal();
+      };
+      $("pp-cancel").onclick = () => { editIndex.personal = -1; renderPersonal(); };
+    }else{
+      $("pp-toggle").onclick = () => { showPp[it._i] = !showPp[it._i]; renderPersonal(); };
+      $("pp-copy").onclick = () => copyText(it.password, "คัดลอกรหัสผ่านแล้ว 🌸");
+      $("pp-copyuser").onclick = () => copyText(it.username || it.site, "คัดลอกชื่อผู้ใช้แล้ว 🌸");
+      $("pp-del").onclick = () => {
+        if(!confirm("ลบรายการนี้?")) return;
+        vaultData.personal.splice(it._i,1); showPp = {}; saveState(); renderPersonal();
+      };
+      $("pp-edit").onclick = () => { editIndex.personal = it._i; renderPersonal(); };
+    }
+  });
+  document.getElementById("pp-add").onclick = () => {
+    const site = document.getElementById("pp-site").value.trim();
+    const username = document.getElementById("pp-user").value.trim();
+    const password = document.getElementById("pp-pass").value;
+    const note = document.getElementById("pp-note").value.trim();
+    if(!site || !password){ toast("กรอกเว็บไซต์และรหัสผ่านก่อน"); return; }
+    vaultData.personal.push({site, username, password, note});
+    saveState(); renderPersonal();
+  };
+  enableReorder(el, 'personal', renderPersonal);
   updateSidebarCounts();
 }
 function renderPwGroup(group){
